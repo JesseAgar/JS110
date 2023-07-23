@@ -5,6 +5,7 @@ function isRealPalindrome(inputString) {
     console.log('is not palidrome');
   }
 }
+
 isRealPalindrome('madam');               // true
 isRealPalindrome('Madam');               // false (case matters)
 isRealPalindrome("madam i'm adam");      // false (all characters matter)
