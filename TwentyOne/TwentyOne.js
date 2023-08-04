@@ -144,10 +144,14 @@ while (true) {
 
       printTableTop(hands, playerHandsAreVisible, handValues, scoreBoard);
 
-      while (handValues[CPUPlayer] < AI_TARGET_SCORE) {
+      let handValueBelowSafeTarget = handValues[CPUPlayer] < AI_TARGET_SCORE;
+
+      while (handValueBelowSafeTarget) {
         let topCardOfDeck = drawCard(deck);
+
         hands[CPUPlayer].push(topCardOfDeck);
         handValues[CPUPlayer] = getHandValue(hands[CPUPlayer]);
+        handValueBelowSafeTarget = handValues[CPUPlayer] < AI_TARGET_SCORE;
 
         pause(0.7);
 
@@ -196,14 +200,6 @@ console.clear();
 print(MESSAGES.goodbye);
 //! END
 
-function anyKeyForNextRound() {
-  print(MESSAGES.nextRound);
-
-  if (USER_IS_PRESENT) {
-    readline.keyIn();
-  }
-  return true;
-}
 
 function someoneWonTournament(scoreBoard) {
   return Object.values(scoreBoard).some(score => score >= WINS_NEEDED);
@@ -571,6 +567,19 @@ function makePlayerHandsAreVisibleTemplate(numberOfCpus, numberOfUsers) {
 
 
   return playersHandsVisibleOrNot;
+}
+
+//*************\\
+//* GET INPUT *\\
+//*************\\
+
+function anyKeyForNextRound() {
+  print(MESSAGES.nextRound);
+
+  if (USER_IS_PRESENT) {
+    readline.keyIn();
+  }
+  return true;
 }
 
 //********\\
