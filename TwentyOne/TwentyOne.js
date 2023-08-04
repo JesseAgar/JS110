@@ -1,37 +1,45 @@
 const readline = require('readline-sync');
 
-const GAME_TARGET = 21;
+const HAND_VALUE_TARGET = 21; // best < 151
 const WINS_NEEDED = 3;
 
 const COMPUTER_PLAYER_NAME = 'CPU';
 const USER_PLAYER_NAME = 'The Human';
 const NUMBER_OF_USERS = 1; // 1 or 0
-let numberOfCPUs = 3; // Between 1 and 4
-const NUMBER_OF_PLAYERS = NUMBER_OF_USERS + numberOfCPUs;
+const NUMBER_OF_CPUS = 3; // Between 1 and 4
+const NUMBER_OF_PLAYERS = NUMBER_OF_USERS + NUMBER_OF_CPUS;
 
-if (NUMBER_OF_USERS === 0 && numberOfCPUs === 1) {
+if (NUMBER_OF_PLAYERS < 2) {
   throw new Error('Need at least 2 players');
 }
-if (![0, 1].includes(NUMBER_OF_USERS) || ![1, 2, 3, 4].includes(numberOfCPUs)) {
+if (![0, 1].includes(NUMBER_OF_USERS) ||
+![1, 2, 3, 4].includes(NUMBER_OF_CPUS)) {
   throw new Error('Outside player limit');
 }
 
 const SUITS = ['♠', '◆', '♣', '♥'];
 const VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 const MASTER_DECK = buildDeck(SUITS, VALUES);
-const AI_TARGET_SCORE = GAME_TARGET - 4;
-const INITIAL_DRAW_NUMBER = Math.floor(GAME_TARGET / 10);
+const AI_TARGET_SCORE = HAND_VALUE_TARGET - 4;
+const INITIAL_DRAW_NUMBER = Math.floor(HAND_VALUE_TARGET / 10);
+const PAUSE_BETWEEN_INITIAL_DRAWS = 0.5 * ( 1 / INITIAL_DRAW_NUMBER);
 
 const MESSAGES = {
-  playAgain: 'Do you want to play again? \n (y)es or (n)o',
-  numberOfGames: '       Hand Value Target: ' + GAME_TARGET + '            First to ' + WINS_NEEDED + ' wins!',
+  playAgain: 'Do you want to play again?',
+  yesOrNo: '(y)es or (n)o',
+  numberOfGames: '       Hand Value Target: ' + HAND_VALUE_TARGET +
+  '            First to ' + WINS_NEEDED + ' wins!',
   goodbye: 'Goodbye',
   shuffling: '\n\n\n\n        SHUFFLING',
+  pressAnyKey: '\n\n   (press most any key to continue)',
+  hitOrStay: '(h)it or (s)tay?',
 };
 
-const SCOREBOARD_TEMPLATE = makeScoreboard(numberOfCPUs, NUMBER_OF_USERS);
-const HAND_VALUES_TEMPLATE = makeHandValues(numberOfCPUs, NUMBER_OF_USERS);
-const HANDS_TEMPLATE = makeHands(numberOfCPUs, NUMBER_OF_USERS);
+const SCOREBOARD_TEMPLATE = makeScoreboard(NUMBER_OF_CPUS, NUMBER_OF_USERS);
+const HAND_VALUES_TEMPLATE = makeHandValues(NUMBER_OF_CPUS, NUMBER_OF_USERS);
+const HANDS_TEMPLATE = makeHands(NUMBER_OF_CPUS, NUMBER_OF_USERS);
+const PLAYER_HAND_IS_VISIBLE_TEMPLATE =
+  makePlayersHandIsVisible(NUMBER_OF_CPUS, NUMBER_OF_USERS);
 
 const CARD_FRONT = {
   top: function() {
@@ -74,66 +82,112 @@ const CARD_BACK = {
     return '  ¯¯¯¯¯ ';
   },
 };
-// draw cards for each player
-//? CLEAR
-//? - score
-//? - shuffling message
-//? CLEAR
-//? - score
-//? - hands, hand values
-//? - hit or stay message
-
-// player can hit or stay
-// invalid:
-//? print hit or stay message
-// stay: end turn
-//? CLEAR
-//? - score
-//? - hands, hand values
-// hit: playerHand.push(deck.pop())
-//? CLEAR
-//? - score
-//? - hands, hand values
-//? - hit or stay message
-// if (over 21) LOSE, add 1 to CPU score
-//? CLEAR
-//? - score
-//? - hands, hand values
-//? - lose message
-// restart
 
 
-// cpu hits or stays
-// if 17 or over stay
-// hit: cpuHand.push(deck.pop())
-//? CLEAR
-//? - score
-//? - hands, hand values
-// if over 21 LOSE, add 1 to user score
-//? CLEAR
-//? - score
-//? - hands, hand values
-//? - lose message
-// restart
-// compare numbers
-// if tie
-// if one is higher, they win, add one to their score
-//? CLEAR
-//? - score
-//? - hands, hand values
-//? - results message
-// restart
-
-//GAME
-//GAME
-//GAME
+//! SETUP
 printOpeningScreen();
 
-do {
-  console.clear();
+while (true) {
+  printShufflingMessage();
+
   let scoreBoard = Object.assign({}, SCOREBOARD_TEMPLATE);
-  playRound(scoreBoard);
-} while (wantToPlayAgain());
+  let deck = MASTER_DECK.slice();
+  deck = shuffled(deck);
+  let hands = JSON.parse(JSON.stringify(HANDS_TEMPLATE));
+  let playerHandIsVisible = Object.assign([], PLAYER_HAND_IS_VISIBLE_TEMPLATE);
+  let handValues = Object.assign([], HAND_VALUES_TEMPLATE);
+
+  //! INITIAL CARD DRAW
+  for (let drawRound = 0; drawRound < INITIAL_DRAW_NUMBER; drawRound++) {
+    for (let player in hands) {
+      let topCardOfDeck = drawCard(deck);
+
+      hands[player].push(topCardOfDeck);
+      handValues[player] = getHandValue(hands[player]);
+
+      pause(PAUSE_BETWEEN_INITIAL_DRAWS);
+      console.clear();
+      printTableTop(hands, playerHandIsVisible, handValues);
+    }
+  }
+
+  //! USER TURN
+  while (true) {
+    if (NUMBER_OF_USERS === 0) break;
+
+    while (userWantsToHit()) {
+      printTableTop(hands, playerHandIsVisible, handValues);
+      let topCardOfDeck = drawCard(deck);
+      hands[USER_PLAYER_NAME].push(topCardOfDeck);
+      pause(0.5);
+      printTableTop(hands, playerHandIsVisible);
+      pause(0.7);
+    }
+    break;
+  }
+
+  //! CPU TURNS
+
+
+  //! ROUND END
+
+  if (wantToPlayAgain()) {
+    continue;
+  } else {
+    break;
+  }
+}
+
+console.clear();
+print(MESSAGES.goodbye);
+
+
+//////
+// ? USER TURN
+//////
+// IF user exists
+// WHILE true
+// ASK for hit or stay
+// IF stay end turn. Break;
+// IF hit, deck.pop(), push to playerHand
+// * PRINT tabletop
+// IF bust break;
+
+
+//////
+// ? CPU TURNS
+//////
+// forEach CPU
+// SET playersHandIsVisible.cpu = true
+// * PRINT tabletop
+// WHILE true
+// if <= AI target, hit
+// * PRINT tabletop
+// else stay
+// if bust end turn
+
+//////
+// ? WINNER
+//////
+// if tie, continue
+// player with highest number scoreboard ++;
+// if (winner) PRINT winner 
+//   Ask to play again, if yes continue else break;
+
+//GAME
+//GAME
+//GAME
+
+
+// do {
+//   console.clear();
+//   print(MESSAGES.shuffling)
+//   pauseInSeconds(0.9);
+//   console.clear();
+
+//   let scoreBoard = Object.assign({}, SCOREBOARD_TEMPLATE);
+//   playRound(scoreBoard)
+// } while (wantToPlayAgain());
 
 function playTournament() {
   let scoreBoard = Object.assign({}, SCOREBOARD_TEMPLATE);
@@ -157,7 +211,7 @@ function drawStartingHands(deck) {
 
     playerCards.forEach(hand => {
       let topCardOfDeck = drawCard(deck);
-      pauseInSeconds(0.5 * ( 1 / INITIAL_DRAW_NUMBER));
+      pause(0.5 * ( 1 / INITIAL_DRAW_NUMBER));
       hand.push(topCardOfDeck);
       console.clear();
       printTableTop(hands);
@@ -184,43 +238,46 @@ function getTournamentWinner(scoreBoard) {
 
 function drawCard(deck) {
   if (deck.length === 1) {
-    deck.push(...shuffled(MASTER_DECK.slice()));
+    let newDeck = shuffled(MASTER_DECK.slice());
+    deck.push(...newDeck);
   }
   return deck.pop();
 }
 
 function wantToPlayAgain() {
-  let nos = ['n', 'no'];
-  let yeses = ['y', 'yes'];
-
-  while (true) {
-    print(MESSAGES.playAgain);
-    let yesOrNo = readline.prompt().toLowerCase();
-
-    if (nos.includes(yesOrNo)) {
-      console.clear();
-      print(MESSAGES.goodbye);
-      return false;
-    } else if (yeses.includes(yesOrNo)) {
-      console.clear();
-      print(MESSAGES.shuffling);
-      pauseInSeconds(0.9);
-      return true;
-    }
-  }
+  print(MESSAGES.playAgain);
+  return getYesOrNo();
 }
 
+function getYesOrNo() {
+  print(MESSAGES.yesOrNo);
+  let yesOrNo = readline.keyIn('', {limit: 'yn'}).toLowerCase();
+
+  if (yesOrNo === 'n') {
+    console.clear();
+    print(MESSAGES.goodbye);
+    return false;
+  } else if (yesOrNo === 'y') {
+    return true;
+  }
+}
 // PRINT TABLETOP
 // PRINT TABLETOP
 // PRINT TABLETOP
-function printTableTop(hands) {
-  for (let CPUPlayerNum = 1; CPUPlayerNum <= numberOfCPUs; CPUPlayerNum++) {
+function printTableTop(hands, handIsVisible) {
+  console.clear();
+  for (let CPUPlayerNum = 1; CPUPlayerNum <= NUMBER_OF_CPUS; CPUPlayerNum++) {
     let cpuName = COMPUTER_PLAYER_NAME + CPUPlayerNum;
     let nameToPrint = (COMPUTER_PLAYER_NAME + ' ' + CPUPlayerNum);
-    printCardsFaceDown(nameToPrint, hands[cpuName]);
+    if (handIsVisible[cpuName]) {
+      printCardsFaceUp(nameToPrint, hands[cpuName]);
+    } else {
+      printCardsFaceDown(nameToPrint, hands[cpuName]);
+    }
+
   }
   if (NUMBER_OF_USERS) {
-    print('');
+    print('\n');
     printCardsFaceUp(USER_PLAYER_NAME, hands[USER_PLAYER_NAME]);
   }
 }
@@ -239,7 +296,10 @@ function printCardsFaceDown(playerName, playerCards = [], numCardsVisible = 1) {
     hand = addNameToSection(hand, section, playerCards,
       playerName, numCardsVisible);
     hand = addCardsToSection(hand, section, playerCards, numCardsVisible);
-    if (index < cardSections.length - 1) {
+
+    let notBottomCardSection = index < cardSections.length - 1;
+
+    if (notBottomCardSection) {
       hand.push('\n');
     }
   });
@@ -283,7 +343,15 @@ function addNameToSection(inputHand, section, playerCards, playerName, numCardsV
   return outputPrintableHand;
 }
 
+function printScore(scoreBoard) {
+  let lengthOfAllNames = Object.keys(SCOREBOARD_TEMPLATE);
+  print();
+}
 
+function userWantsToHit() {
+  print(MESSAGES.hitOrStay);
+  return readline.keyIn('', {limit: 'hs'}).toLowerCase() === 'h';
+}
 // CALCULATE HAND VALUE
 // CALCULATE HAND VALUE
 // CALCULATE HAND VALUE
@@ -299,9 +367,13 @@ function getHandValue(playerCards) {
     handValue += getNonAceCardValue(card);
   });
   handValue += getAcesValues(aceCount, handValue);
-  handValue = handValue > GAME_TARGET ? 'BUST' : handValue;
+  handValue = isBusted(handValue) ? 'BUST' : handValue;
 
   return handValue;
+}
+
+function isBusted(playerHandScore) {
+  return playerHandScore > HAND_VALUE_TARGET
 }
 
 function getNonAceCardValue(card) {
@@ -325,7 +397,7 @@ function getAcesValues(numberOfAces, handValue) {
   while (acesEleven > 0) {
     let acesValue = (acesOne * 1) + (acesEleven * 11);
     let totalValue = acesValue + handValue;
-    if (totalValue < GAME_TARGET) break;
+    if (totalValue < HAND_VALUE_TARGET) break;
     acesOne++;
     acesEleven--;
   }
@@ -422,15 +494,32 @@ function makeHands(numberOfCpus, numberOfUsers) {
   return hands;
 }
 
+function makePlayersHandIsVisible(numberOfCpus, numberOfUsers) {
+  let playersHandsVisibleOrNot = {};
 
+  for (let cpuPlayer = 1; cpuPlayer <= numberOfCpus; cpuPlayer++) {
+    playersHandsVisibleOrNot[COMPUTER_PLAYER_NAME + String(cpuPlayer)] =  false;
+  }
+
+  if (numberOfUsers) {
+    playersHandsVisibleOrNot[USER_PLAYER_NAME] = true;
+  }
+
+
+  return playersHandsVisibleOrNot;
+}
+
+/////////
 // MISC
-// MISC
-// MISC
+/////////
 function randomNumBetween(min, max) {
+  if (min > max) {
+    [min, max] = [max, min];
+  }
   return Math.floor((Math.random() * (max - min + 1)) + min);
 }
 
-function pauseInSeconds(secondsToPause) {
+function pause(secondsToPause) {
   let currentTime = currentTimeInSeconds();
   let endTime = currentTime + secondsToPause;
   while (currentTime < endTime) {
@@ -450,7 +539,7 @@ function print(input) {
   console.log(input);
 }
 
-function printOpeningScreen () {
+function printOpeningScreen() {
   console.clear();
   print(`╦ ╦┌─┐┬  ┌─┐┌─┐┌┬┐┌─┐  ╔╦╗┌─┐
 ║║║├┤ │  │  │ ││││├┤    ║ │ │
@@ -462,5 +551,31 @@ function printOpeningScreen () {
   ██████  ███████ ██   ██  ██████ ██   ██  █████  ██   ██  ██████ ██   ██ `);
 
   print('\n' + MESSAGES.numberOfGames);
-  pauseInSeconds(2);
+  console.log(MESSAGES.pressAnyKey);
+  readline.keyIn();
 }
+
+function makeDashes(numOfDashes) {
+  return '-'.repeat(numOfDashes);
+}
+
+function printShufflingMessage(lengthOfMessage = 0.9) {
+  console.clear();
+  print(MESSAGES.shuffling);
+  pause(lengthOfMessage);
+  console.clear();
+}
+
+// ! while (true)
+//////
+// ? SETUP
+//////
+// * PRINT shuffling
+// SET scoreBoard
+// SET deck = MasterDeck.slice()
+// SET hands = blankHands
+// SET playersHandIsVisible
+// SET handValues = blankHandValues
+// hands = initial Draw
+// * PRINT tabletop with each card add
+// * only user fully visible
