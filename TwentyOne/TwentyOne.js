@@ -1,45 +1,43 @@
 const readline = require('readline-sync');
 
-const HAND_VALUE_TARGET = 21; // best < 151
-const WINS_NEEDED = 3;
+const HAND_VALUE_TARGET = 21; // HAND_VALUE_TARGET < 151 ish or it flickers
+const WINS_NEEDED = 2; // WINS_NEEDED >= 1
 
-const COMPUTER_PLAYER_NAME = 'CPU';
-const USER_PLAYER_NAME = 'The Human';
+const CPUS_NAME = 'CPU ';
+const USER_NAME = 'Meat Elemental';
 const NUMBER_OF_USERS = 1; // 1 or 0
-const NUMBER_OF_CPUS = 3; // Between 1 and 4
+const NUMBER_OF_CPUS = 2; // Between 1 and 4
 const NUMBER_OF_PLAYERS = NUMBER_OF_USERS + NUMBER_OF_CPUS;
-
-if (NUMBER_OF_PLAYERS < 2) {
-  throw new Error('Need at least 2 players');
-}
-if (![0, 1].includes(NUMBER_OF_USERS) ||
-![1, 2, 3, 4].includes(NUMBER_OF_CPUS)) {
-  throw new Error('Outside player limit');
-}
+const USER_IS_PRESENT = NUMBER_OF_USERS > 0;
 
 const SUITS = ['♠', '◆', '♣', '♥'];
 const VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 const MASTER_DECK = buildDeck(SUITS, VALUES);
 const AI_TARGET_SCORE = HAND_VALUE_TARGET - 4;
 const INITIAL_DRAW_NUMBER = Math.floor(HAND_VALUE_TARGET / 10);
-const PAUSE_BETWEEN_INITIAL_DRAWS = 0.5 * ( 1 / INITIAL_DRAW_NUMBER);
+const NUMBER_CARDS_HIDDEN = 1;
+const PAUSE_BETWEEN_DEALT_CARDS = 0.5 * ( 1 / INITIAL_DRAW_NUMBER);
 
 const MESSAGES = {
   playAgain: 'Do you want to play again?',
   yesOrNo: '(y)es or (n)o',
-  numberOfGames: '       Hand Value Target: ' + HAND_VALUE_TARGET +
-  '            First to ' + WINS_NEEDED + ' wins!',
+  numberOfGames: 'Hand Value Target: ' + HAND_VALUE_TARGET,
+  numberOfWins: 'First to ' + WINS_NEEDED + ' win(s)!',
   goodbye: 'Goodbye',
-  shuffling: '\n\n\n\n        SHUFFLING',
-  pressAnyKey: '\n\n   (press most any key to continue)',
+  shuffling: '\n\n                        SHUFFLING',
+  pressAnyKey: '\n\n   [press (most) any key to continue]',
   hitOrStay: '(h)it or (s)tay?',
+  win: ' wins!',
+  nextRound: '[press (most) any key for next round]',
 };
 
-const SCOREBOARD_TEMPLATE = makeScoreboard(NUMBER_OF_CPUS, NUMBER_OF_USERS);
-const HAND_VALUES_TEMPLATE = makeHandValues(NUMBER_OF_CPUS, NUMBER_OF_USERS);
-const HANDS_TEMPLATE = makeHands(NUMBER_OF_CPUS, NUMBER_OF_USERS);
-const PLAYER_HAND_IS_VISIBLE_TEMPLATE =
-  makePlayersHandIsVisible(NUMBER_OF_CPUS, NUMBER_OF_USERS);
+const SCOREBOARD_TEMPLATE =
+  makeScoreboardTemplate(NUMBER_OF_CPUS, NUMBER_OF_USERS);
+const HAND_VALUES_TEMPLATE =
+  makeHandValuesTemplate(NUMBER_OF_CPUS, NUMBER_OF_USERS);
+const HANDS_TEMPLATE = makeHandsTemplate(NUMBER_OF_CPUS, NUMBER_OF_USERS);
+const PLAYER_HANDS_ARE_VISIBLE_TEMPLATE =
+  makePlayerHandsAreVisibleTemplate(NUMBER_OF_CPUS, NUMBER_OF_USERS);
 
 const CARD_FRONT = {
   top: function() {
@@ -83,53 +81,109 @@ const CARD_BACK = {
   },
 };
 
+throwErrorsIfGameParametersAreWrong();
 
-//! SETUP
+//! START
 printOpeningScreen();
 
 while (true) {
-  printShufflingMessage();
-
+  //! SET/RESET SCOREBOARD, DECK AND HANDS
   let scoreBoard = Object.assign({}, SCOREBOARD_TEMPLATE);
-  let deck = MASTER_DECK.slice();
-  deck = shuffled(deck);
-  let hands = JSON.parse(JSON.stringify(HANDS_TEMPLATE));
-  let playerHandIsVisible = Object.assign([], PLAYER_HAND_IS_VISIBLE_TEMPLATE);
-  let handValues = Object.assign([], HAND_VALUES_TEMPLATE);
 
-  //! INITIAL CARD DRAW
-  for (let drawRound = 0; drawRound < INITIAL_DRAW_NUMBER; drawRound++) {
-    for (let player in hands) {
-      let topCardOfDeck = drawCard(deck);
+  do {
+    printShufflingMessage(scoreBoard);
 
-      hands[player].push(topCardOfDeck);
-      handValues[player] = getHandValue(hands[player]);
+    let deck = shuffled(MASTER_DECK.slice());
+    let hands = JSON.parse(JSON.stringify(HANDS_TEMPLATE));
+    let playerHandsAreVisible = Object.assign({},
+      PLAYER_HANDS_ARE_VISIBLE_TEMPLATE);
+    let handValues = Object.assign({}, HAND_VALUES_TEMPLATE);
 
-      pause(PAUSE_BETWEEN_INITIAL_DRAWS);
-      console.clear();
-      printTableTop(hands, playerHandIsVisible, handValues);
+    //! INITIAL CARD DRAW
+    for (let drawRound = 0; drawRound < INITIAL_DRAW_NUMBER; drawRound++) {
+      for (let player in hands) {
+        let topCardOfDeck = drawCard(deck);
+
+        hands[player].push(topCardOfDeck);
+        handValues[player] = getHandValue(hands[player]);
+
+        pause(PAUSE_BETWEEN_DEALT_CARDS);
+        console.clear();
+
+        printTableTop(hands, playerHandsAreVisible, handValues, scoreBoard);
+      }
     }
-  }
 
-  //! USER TURN
-  while (true) {
-    if (NUMBER_OF_USERS === 0) break;
+    //! USER TURN
+    while (true) {
+      pause(0.8);
+      if (!USER_IS_PRESENT) break;
+      if (handValues[USER_NAME] === 'BUST') break;
+      if (!userWantsToHit()) break;
 
-    while (userWantsToHit()) {
-      printTableTop(hands, playerHandIsVisible, handValues);
+      printTableTop(hands, playerHandsAreVisible, handValues, scoreBoard);
+
       let topCardOfDeck = drawCard(deck);
-      hands[USER_PLAYER_NAME].push(topCardOfDeck);
+
+      hands[USER_NAME].push(topCardOfDeck);
+      handValues[USER_NAME] = getHandValue(hands[USER_NAME]);
+
       pause(0.5);
-      printTableTop(hands, playerHandIsVisible);
-      pause(0.7);
+
+      printTableTop(hands, playerHandsAreVisible, handValues, scoreBoard);
     }
-    break;
-  }
 
-  //! CPU TURNS
+    printTableTop(hands, playerHandsAreVisible, handValues, scoreBoard);
 
+    //! CPU TURNS
+    for (let CPUNumber = 1; CPUNumber <= NUMBER_OF_CPUS; CPUNumber++) {
+      if (USER_IS_PRESENT) pause(0.7);
 
-  //! ROUND END
+      let CPUPlayer = CPUS_NAME + CPUNumber;
+      playerHandsAreVisible[CPUPlayer] = true;
+
+      printTableTop(hands, playerHandsAreVisible, handValues, scoreBoard);
+
+      while (handValues[CPUPlayer] < AI_TARGET_SCORE) {
+        let topCardOfDeck = drawCard(deck);
+        hands[CPUPlayer].push(topCardOfDeck);
+        handValues[CPUPlayer] = getHandValue(hands[CPUPlayer]);
+
+        pause(0.7);
+
+        printTableTop(hands, playerHandsAreVisible, handValues, scoreBoard);
+      }
+      pause(0.5);
+    }
+    pause(0.7);
+
+    //! ROUND END
+    let roundWinner = getRoundWinner(handValues);
+
+    printTableTop(
+      hands,
+      playerHandsAreVisible,
+      handValues,
+      scoreBoard,
+      roundWinner);
+
+    pause(0.7);
+
+    scoreBoard[roundWinner]++;
+
+    printTableTop(
+      hands,
+      playerHandsAreVisible,
+      handValues,
+      scoreBoard,
+      roundWinner);
+
+    pause(0.4);
+
+  } while (!someoneWonTournament(scoreBoard) && anyKeyForNextRound());
+
+  //! TOURNAMENT END
+  print(getTournamentWinner(scoreBoard) + MESSAGES.win);
 
   if (wantToPlayAgain()) {
     continue;
@@ -140,84 +194,15 @@ while (true) {
 
 console.clear();
 print(MESSAGES.goodbye);
+//! END
 
+function anyKeyForNextRound() {
+  print(MESSAGES.nextRound);
 
-//////
-// ? USER TURN
-//////
-// IF user exists
-// WHILE true
-// ASK for hit or stay
-// IF stay end turn. Break;
-// IF hit, deck.pop(), push to playerHand
-// * PRINT tabletop
-// IF bust break;
-
-
-//////
-// ? CPU TURNS
-//////
-// forEach CPU
-// SET playersHandIsVisible.cpu = true
-// * PRINT tabletop
-// WHILE true
-// if <= AI target, hit
-// * PRINT tabletop
-// else stay
-// if bust end turn
-
-//////
-// ? WINNER
-//////
-// if tie, continue
-// player with highest number scoreboard ++;
-// if (winner) PRINT winner 
-//   Ask to play again, if yes continue else break;
-
-//GAME
-//GAME
-//GAME
-
-
-// do {
-//   console.clear();
-//   print(MESSAGES.shuffling)
-//   pauseInSeconds(0.9);
-//   console.clear();
-
-//   let scoreBoard = Object.assign({}, SCOREBOARD_TEMPLATE);
-//   playRound(scoreBoard)
-// } while (wantToPlayAgain());
-
-function playTournament() {
-  let scoreBoard = Object.assign({}, SCOREBOARD_TEMPLATE);
-
-  while (!someoneWonTournament(scoreBoard)) {
-    scoreBoard[playRound()]++;
+  if (USER_IS_PRESENT) {
+    readline.keyIn();
   }
-  print(getTournamentWinner(scoreBoard) + ' wins!');
-}
-
-function playRound(scoreBoard) {
-  let deck = shuffled(MASTER_DECK.slice());
-  let hands = drawStartingHands(deck);
-  let handValues = Object.assign({}, HAND_VALUES_TEMPLATE);
-}
-
-function drawStartingHands(deck) {
-  let hands = JSON.parse(JSON.stringify(HANDS_TEMPLATE));
-  for (let drawnCard = 0; drawnCard < INITIAL_DRAW_NUMBER; drawnCard++) {
-    let playerCards = Object.values(hands);
-
-    playerCards.forEach(hand => {
-      let topCardOfDeck = drawCard(deck);
-      pause(0.5 * ( 1 / INITIAL_DRAW_NUMBER));
-      hand.push(topCardOfDeck);
-      console.clear();
-      printTableTop(hands);
-    });
-  }
-  return hands;
+  return true;
 }
 
 function someoneWonTournament(scoreBoard) {
@@ -225,15 +210,14 @@ function someoneWonTournament(scoreBoard) {
 }
 
 function getTournamentWinner(scoreBoard) {
-  Object.entries.forEach(player => {
-    let playerScore = player[1];
-    let playerName = player[0];
+  for (let playerName in scoreBoard) {
+    let playerScore = scoreBoard[playerName];
+
     if (playerScore >= WINS_NEEDED) {
       return playerName;
-    } else {
-      return undefined;
     }
-  });
+  }
+  return null;
 }
 
 function drawCard(deck) {
@@ -241,61 +225,75 @@ function drawCard(deck) {
     let newDeck = shuffled(MASTER_DECK.slice());
     deck.push(...newDeck);
   }
+
   return deck.pop();
 }
 
 function wantToPlayAgain() {
   print(MESSAGES.playAgain);
+
   return getYesOrNo();
 }
 
 function getYesOrNo() {
   print(MESSAGES.yesOrNo);
+
   let yesOrNo = readline.keyIn('', {limit: 'yn'}).toLowerCase();
 
-  if (yesOrNo === 'n') {
-    console.clear();
-    print(MESSAGES.goodbye);
-    return false;
-  } else if (yesOrNo === 'y') {
-    return true;
-  }
+  return yesOrNo === 'y';
 }
+
 // PRINT TABLETOP
 // PRINT TABLETOP
 // PRINT TABLETOP
-function printTableTop(hands, handIsVisible) {
+//******************\\
+//* PRINT TABLETOP *\\
+//******************\\
+function printTableTop(hands, handIsVisible, handValues, scoreBoard, winner) {
   console.clear();
+  printScore(scoreBoard, winner);
+
   for (let CPUPlayerNum = 1; CPUPlayerNum <= NUMBER_OF_CPUS; CPUPlayerNum++) {
-    let cpuName = COMPUTER_PLAYER_NAME + CPUPlayerNum;
-    let nameToPrint = (COMPUTER_PLAYER_NAME + ' ' + CPUPlayerNum);
+    let cpuName = CPUS_NAME + CPUPlayerNum;
+    let playerName = (CPUS_NAME + CPUPlayerNum);
+
     if (handIsVisible[cpuName]) {
-      printCardsFaceUp(nameToPrint, hands[cpuName]);
+      printCardsFaceUp(playerName, hands[cpuName], handValues);
     } else {
-      printCardsFaceDown(nameToPrint, hands[cpuName]);
+      printCardsFaceDown(playerName, hands[cpuName]);
     }
 
   }
+
   if (NUMBER_OF_USERS) {
     print('\n');
-    printCardsFaceUp(USER_PLAYER_NAME, hands[USER_PLAYER_NAME]);
+    printCardsFaceUp(USER_NAME, hands[USER_NAME], handValues);
   }
 }
 
-function printCardsFaceUp(playerName, playerCards) {
-  let allCardsVisible = Infinity;
-  return printCardsFaceDown(playerName, playerCards, allCardsVisible);
+function printCardsFaceUp(playerName, playerHand, handValues) {
+  let infinityCardsVisible = Infinity;
+
+  return printCardsFaceDown(
+    playerName,
+    playerHand,
+    infinityCardsVisible,
+    handValues
+  );
 }
 
-function printCardsFaceDown(playerName, playerCards = [], numCardsVisible = 1) {
+function printCardsFaceDown(
+  playerName,
+  playerHand = [],
+  numCardsVisible = INITIAL_DRAW_NUMBER - NUMBER_CARDS_HIDDEN,
+  handValues
+) {
   let cardSections = Object.keys(CARD_FRONT);
   let hand = [];
-
-
   cardSections.forEach((section,index) => {
-    hand = addNameToSection(hand, section, playerCards,
-      playerName, numCardsVisible);
-    hand = addCardsToSection(hand, section, playerCards, numCardsVisible);
+    hand = addNameToSection(hand, section, playerName,
+      numCardsVisible, handValues);
+    hand = addCardsToSection(hand, section, playerHand, numCardsVisible);
 
     let notBottomCardSection = index < cardSections.length - 1;
 
@@ -307,10 +305,10 @@ function printCardsFaceDown(playerName, playerCards = [], numCardsVisible = 1) {
   print(hand.join(''));
 }
 
-function addCardsToSection(inputHand, section, playerCards, numCardsVisible, ) {
+function addCardsToSection(inputHand, section, playerHand, numCardsVisible) {
   let outputHand = inputHand.slice();
 
-  playerCards.forEach((card, index) => {
+  playerHand.forEach((card, index) => {
     if (index < numCardsVisible) {
       outputHand.push(CARD_FRONT[section](card));
     } else {
@@ -321,14 +319,15 @@ function addCardsToSection(inputHand, section, playerCards, numCardsVisible, ) {
   return outputHand;
 }
 
-function addNameToSection(inputHand, section, playerCards, playerName, numCardsVisible) {
+function addNameToSection(inputHand, section, playerName,
+  numCardsVisible, handValues) {
   let outputPrintableHand = inputHand.slice();
-  let spacesAfterName = 1;
+  const SPACES_AFTER_NAME = 1;
   let nameLength = playerName.length;
-  let printableName = playerName.padEnd(nameLength + spacesAfterName, ' ');
+  let printableName = playerName.padEnd(nameLength + SPACES_AFTER_NAME, ' ');
   let namePadding = makeSpaces(printableName.length);
   let valuesAreVisible = (numCardsVisible === Infinity);
-  let handValue = getHandValue(playerCards);
+  let handValue = valuesAreVisible ? handValues[playerName] : null;
 
   if (section === 'middle') {
     outputPrintableHand.push(printableName);
@@ -343,29 +342,85 @@ function addNameToSection(inputHand, section, playerCards, playerName, numCardsV
   return outputPrintableHand;
 }
 
-function printScore(scoreBoard) {
-  let lengthOfAllNames = Object.keys(SCOREBOARD_TEMPLATE);
-  print();
+function printScore(scoreBoard, winnerName) {
+  let printableScore = '';
+  let leadingSpaces = '     ';
+  for (let player in scoreBoard) {
+    if (player === 'tie' || player === 'all bust') continue;
+    printableScore += leadingSpaces + player + ': ' + scoreBoard[player];
+  }
+  let dashes = makeDashes(printableScore.length - leadingSpaces.length);
+
+  print(leadingSpaces + MESSAGES.numberOfGames + '      ' + MESSAGES.numberOfWins);
+  print('\n' + leadingSpaces + dashes + '\n' + printableScore + '\n' + leadingSpaces + dashes);
+  print(getDeclareRoundWinMessage(printableScore, winnerName));
 }
+
+function getRoundWinner(handValues) {
+  let roundWinner = null;
+  let winnerHandValue = 0;
+
+  for (let key in handValues) {
+    if (handValues[key] > winnerHandValue) {
+      winnerHandValue = handValues[key];
+      roundWinner = key;
+    } else if (handValues[key] === winnerHandValue) {
+      roundWinner = 'tie';
+    }
+  }
+  if (roundWinner === null) {
+    return 'all bust';
+  }
+  return roundWinner;
+}
+
+
+function getDeclareRoundWinMessage(scoreLine, winnerName = null) {
+  if (winnerName === null) {
+    return '\n\n';
+  } else if (winnerName === 'tie') {
+    return '          TIE (NO SCORE CHANGE)' + '\n' + '\n';
+  } else if (winnerName === 'all bust') {
+    return '          ALL BUST' + '\n' + '\n';
+  }
+  let nameRegex = RegExp(winnerName);
+  let nameLength = winnerName.length;
+  let nameReplacement = 'Ó'.repeat(nameLength);
+  let scoreLineWithNameReplaced = scoreLine.replace(nameRegex, nameReplacement);
+  let scoreLineAllSpaces = scoreLineWithNameReplaced.replace(/[^Ó]/gi, ' ');
+
+  let pointToWinnerArray = [];
+  pointToWinnerArray.push(scoreLineAllSpaces.replace(/Ó/gi, '↑'));
+  pointToWinnerArray.push('\n');
+  pointToWinnerArray.push(scoreLineAllSpaces.replace(/[Ó]{1,}/, 'WINNER'));
+  return pointToWinnerArray.join('') + '\n';
+}
+
 
 function userWantsToHit() {
   print(MESSAGES.hitOrStay);
-  return readline.keyIn('', {limit: 'hs'}).toLowerCase() === 'h';
+
+  let userWantsToHit = readline.keyIn('', {limit: 'hs'}).toLowerCase() === 'h';
+
+  return userWantsToHit;
 }
-// CALCULATE HAND VALUE
-// CALCULATE HAND VALUE
-// CALCULATE HAND VALUE
-function getHandValue(playerCards) {
+
+//************************\\
+//* CALCULATE HAND VALUE *\\
+//************************\\
+function getHandValue(playerHand) {
   let handValue = 0;
   let aceCount = 0;
 
-  playerCards.forEach(card => {
+  playerHand.forEach(card => {
     if (isAce(card)) {
       aceCount++;
       return;
     }
+
     handValue += getNonAceCardValue(card);
   });
+
   handValue += getAcesValues(aceCount, handValue);
   handValue = isBusted(handValue) ? 'BUST' : handValue;
 
@@ -373,11 +428,12 @@ function getHandValue(playerCards) {
 }
 
 function isBusted(playerHandScore) {
-  return playerHandScore > HAND_VALUE_TARGET
+  return playerHandScore > HAND_VALUE_TARGET;
 }
 
 function getNonAceCardValue(card) {
   let cardValue = card.replace(/[\W]/g, '');
+
   switch (cardValue) {
     case 'J':
     case 'Q':
@@ -388,12 +444,14 @@ function getNonAceCardValue(card) {
     default:
       return Number(cardValue);
   }
+
   return NaN;
 }
 
 function getAcesValues(numberOfAces, handValue) {
   let acesOne = 0;
   let acesEleven = numberOfAces;
+
   while (acesEleven > 0) {
     let acesValue = (acesOne * 1) + (acesEleven * 11);
     let totalValue = acesValue + handValue;
@@ -401,26 +459,30 @@ function getAcesValues(numberOfAces, handValue) {
     acesOne++;
     acesEleven--;
   }
+
   return (acesOne * 1) + (acesEleven * 11);
 }
 
 function isAce(card) {
   let cardValue = card.replace(/[\W]/gi, '');
+
   return cardValue === 'A';
 }
 
 
-// BUILD / SHUFFLE DECK
-// BUILD / SHUFFLE DECK
-// BUILD / SHUFFLE DECK
+//************************\\
+//* BUILD / SHUFFLE DECK *\\
+//************************\\
 function buildDeck(suits, values) {
   let deck = [];
+
   suits.forEach(suit => {
     values.forEach(value => {
       let card = value.padEnd(2, ' ') + suit;
       deck.push(card);
     });
   });
+
   return deck;
 }
 
@@ -428,6 +490,7 @@ function buildDeck(suits, values) {
 function shuffled(inputDeck, numOfShuffles = 5) {
   let copiedDeck = inputDeck.slice();
   let shuffles = 0;
+
   while (shuffles < numOfShuffles) {
     copiedDeck.sort(() => {
       return randomNumBetween(-1, 1);
@@ -443,91 +506,94 @@ function cutTheDeck(inputDeck) {
   let copiedDeck = inputDeck.slice();
   let middleIndex = Math.floor(copiedDeck.length / 2);
   let halfTheDeck = copiedDeck.splice(0, middleIndex);
+
   return copiedDeck.concat(halfTheDeck);
 }
 
 
-// MAKE TEMPLATES
-// MAKE TEMPLATES
-// MAKE TEMPLATES
-function makeScoreboard(numberOfCpus, numberOfUsers) {
+//******************\\
+//* MAKE TEMPLATES *\\
+//******************\\
+function makeScoreboardTemplate(numberOfCpus, numberOfUsers) {
   let scoreBoard = {};
 
   for (let cpuPlayer = 1; cpuPlayer <= numberOfCpus; cpuPlayer++) {
-    scoreBoard[COMPUTER_PLAYER_NAME + String(cpuPlayer)] =  0;
+    scoreBoard[CPUS_NAME + String(cpuPlayer)] =  0;
   }
 
   if (numberOfUsers) {
-    scoreBoard[USER_PLAYER_NAME] = 0;
+    scoreBoard[USER_NAME] = 0;
   }
 
   scoreBoard.tie = NaN;
   return scoreBoard;
 }
 
-function makeHandValues(numberOfCpus, numberOfUsers) {
+function makeHandValuesTemplate(numberOfCpus, numberOfUsers) {
   let handValues = {};
 
   for (let cpuPlayer = 1; cpuPlayer <= numberOfCpus; cpuPlayer++) {
-    handValues[COMPUTER_PLAYER_NAME + String(cpuPlayer)] =  0;
+    handValues[CPUS_NAME + String(cpuPlayer)] =  0;
   }
 
   if (numberOfUsers) {
-    handValues[USER_PLAYER_NAME] = 0;
+    handValues[USER_NAME] = 0;
   }
 
   return handValues;
 }
 
-function makeHands(numberOfCpus, numberOfUsers) {
+function makeHandsTemplate(numberOfCpus, numberOfUsers) {
   let hands = {};
 
   for (let cpuPlayer = 1; cpuPlayer <= numberOfCpus; cpuPlayer++) {
-    hands[COMPUTER_PLAYER_NAME + String(cpuPlayer)] =  [];
+    hands[CPUS_NAME + String(cpuPlayer)] =  [];
   }
 
   if (numberOfUsers) {
-    hands[USER_PLAYER_NAME] = [];
+    hands[USER_NAME] = [];
   }
 
 
   return hands;
 }
 
-function makePlayersHandIsVisible(numberOfCpus, numberOfUsers) {
+function makePlayerHandsAreVisibleTemplate(numberOfCpus, numberOfUsers) {
   let playersHandsVisibleOrNot = {};
 
   for (let cpuPlayer = 1; cpuPlayer <= numberOfCpus; cpuPlayer++) {
-    playersHandsVisibleOrNot[COMPUTER_PLAYER_NAME + String(cpuPlayer)] =  false;
+    playersHandsVisibleOrNot[CPUS_NAME + String(cpuPlayer)] =  false;
   }
 
   if (numberOfUsers) {
-    playersHandsVisibleOrNot[USER_PLAYER_NAME] = true;
+    playersHandsVisibleOrNot[USER_NAME] = true;
   }
 
 
   return playersHandsVisibleOrNot;
 }
 
-/////////
-// MISC
-/////////
+//********\\
+//* MISC *\\
+//********\\
 function randomNumBetween(min, max) {
   if (min > max) {
     [min, max] = [max, min];
   }
+
   return Math.floor((Math.random() * (max - min + 1)) + min);
 }
 
 function pause(secondsToPause) {
-  let currentTime = currentTimeInSeconds();
+  let currentTime = getCurrentTimeInSeconds();
   let endTime = currentTime + secondsToPause;
+
   while (currentTime < endTime) {
-    currentTime = currentTimeInSeconds();
+    currentTime = getCurrentTimeInSeconds();
   }
 }
 
-function currentTimeInSeconds() {
+function getCurrentTimeInSeconds() {
   return new Date().getTime() / 1000;
 }
 
@@ -541,6 +607,7 @@ function print(input) {
 
 function printOpeningScreen() {
   console.clear();
+
   print(`╦ ╦┌─┐┬  ┌─┐┌─┐┌┬┐┌─┐  ╔╦╗┌─┐
 ║║║├┤ │  │  │ ││││├┤    ║ │ │
 ╚╩╝└─┘┴─┘└─┘└─┘┴ ┴└─┘   ╩ └─┘` + '\n' +
@@ -550,8 +617,9 @@ function printOpeningScreen() {
   ██   ██ ██      ██   ██ ██      ██  ██  ██   ██ ██   ██ ██      ██  ██  
   ██████  ███████ ██   ██  ██████ ██   ██  █████  ██   ██  ██████ ██   ██ `);
 
-  print('\n' + MESSAGES.numberOfGames);
-  console.log(MESSAGES.pressAnyKey);
+  print('\n' + '       ' + MESSAGES.numberOfGames + '            ' + MESSAGES.numberOfWins);
+  print(MESSAGES.pressAnyKey);
+
   readline.keyIn();
 }
 
@@ -559,23 +627,28 @@ function makeDashes(numOfDashes) {
   return '-'.repeat(numOfDashes);
 }
 
-function printShufflingMessage(lengthOfMessage = 0.9) {
+function printShufflingMessage(scoreBoard, lengthOfMessage = 0.6) {
   console.clear();
+
+  printScore(scoreBoard);
   print(MESSAGES.shuffling);
+
   pause(lengthOfMessage);
-  console.clear();
 }
 
-// ! while (true)
-//////
-// ? SETUP
-//////
-// * PRINT shuffling
-// SET scoreBoard
-// SET deck = MasterDeck.slice()
-// SET hands = blankHands
-// SET playersHandIsVisible
-// SET handValues = blankHandValues
-// hands = initial Draw
-// * PRINT tabletop with each card add
-// * only user fully visible
+function throwErrorsIfGameParametersAreWrong() {
+  if (WINS_NEEDED < 1) {
+    throw new Error('Need at least 1 win');
+  }
+
+  if (NUMBER_OF_PLAYERS < 2) {
+    throw new Error('Need at least 2 players');
+  }
+
+  if (
+    ![0, 1].includes(NUMBER_OF_USERS) ||
+    ![1, 2, 3, 4].includes(NUMBER_OF_CPUS)
+  ) {
+    throw new Error('Outside player limits');
+  }
+}
