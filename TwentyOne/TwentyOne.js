@@ -18,10 +18,10 @@ const INITIAL_DRAW_NUMBER = Math.floor(HAND_VALUE_TARGET / 10);
 const NUMBER_CARDS_HIDDEN = 1;
 const PAUSE_BETWEEN_DEALT_CARDS = 0.5 * ( 1 / INITIAL_DRAW_NUMBER);
 
-const INPUT_TEXT_COLOUR = '\033[93m';
-const WINNER_TEXT_COLOUR = '\033[32m';
-const DEFAULT_TEXT_COLOUR =  '\033[0m';
-const TIE_BUST_TEXT_COLOUR =  '\033[91m';
+const INPUT_TEXT_COLOUR = '\x1b[93m';
+const WINNER_TEXT_COLOUR = '\x1b[32m';
+const DEFAULT_TEXT_COLOUR = '\x1b[0m';
+const TIE_BUST_TEXT_COLOUR = '\x1b[91m';
 
 const MESSAGES = {
   playAgain: 'Do you want to play again?',
