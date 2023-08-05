@@ -1,31 +1,19 @@
+var readlineSync = require('readline-sync'),
 
-function pause(secondsToPause) {
-  let msToPause = secondsToPause * 1000;
-  const returnTrue = function() {
-    return true;
-  };
-  const doNothing = function () {
-  };
-  let stopLoop = setTimeout(returnTrue, msToPause);
+MAX = 60, MIN = 0, value = 30, key;
 
-  while (true) {
-    if (!stopLoop) break;
-  }
+console.log('\n\n' + (new Array(20)).join(' ') +
+  '[Z] <- -> [X]  FIX: [SPACE]\n');
+
+while (true) {
+  console.log('\x1B[1A\x1B[K|' +
+    (new Array(value + 1)).join('-') + 'O' +
+    (new Array(MAX - value + 1)).join('-') + '| ' + value);
+  key = readlineSync.keyIn('',
+    {hideEchoBack: true, mask: '', limit: 'zx '});
+  if (key === 'z') { if (value > MIN) { value--; } }
+  else if (key === 'x') { if (value < MAX) { value++; } }
+  else { break; }
 }
-pause(100);
 
-console.log('a');
-
-
-// function pause(secondsToPause) {
-//   let currentTime = getCurrentTimeInSeconds();
-//   let endTime = currentTime + secondsToPause;
-
-//   while (currentTime < endTime) {
-//     currentTime = getCurrentTimeInSeconds();
-//   }
-// }
-
-// function getCurrentTimeInSeconds() {
-//   return new Date().getTime() / 1000;
-// }
+console.log("\u001b[44mHello, world!\u001b[0m");

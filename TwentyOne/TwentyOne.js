@@ -1,6 +1,6 @@
 const readline = require('readline-sync');
 
-const HAND_VALUE_TARGET = 21; // HAND_VALUE_TARGET < 151 ish or it flickers
+const HAND_VALUE_TARGET = 21;
 const WINS_NEEDED = 2; // WINS_NEEDED >= 1
 
 const CPUS_NAME = 'CPU ';
@@ -12,11 +12,16 @@ const USER_IS_PRESENT = NUMBER_OF_USERS > 0;
 
 const SUITS = ['♠', '◆', '♣', '♥'];
 const VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-const MASTER_DECK = buildDeck(SUITS, VALUES);
+const MASTER_DECK = makeMasterDeck(SUITS, VALUES);
 const AI_TARGET_SCORE = HAND_VALUE_TARGET - 4;
 const INITIAL_DRAW_NUMBER = Math.floor(HAND_VALUE_TARGET / 10);
 const NUMBER_CARDS_HIDDEN = 1;
 const PAUSE_BETWEEN_DEALT_CARDS = 0.5 * ( 1 / INITIAL_DRAW_NUMBER);
+
+const INPUT_TEXT_COLOUR = '\033[93m';
+const WINNER_TEXT_COLOUR = '\033[32m';
+const DEFAULT_TEXT_COLOUR =  '\033[0m';
+const TIE_BUST_TEXT_COLOUR =  '\033[91m';
 
 const MESSAGES = {
   playAgain: 'Do you want to play again?',
@@ -25,11 +30,24 @@ const MESSAGES = {
   numberOfWins: 'First to ' + WINS_NEEDED + ' win(s)!',
   goodbye: 'Goodbye',
   shuffling: '\n\n                        SHUFFLING',
-  pressAnyKey: '\n\n   [press (most) any key to continue]',
-  hitOrStay: '(h)it or (s)tay?',
+  pressAnyKey: INPUT_TEXT_COLOUR
+    + '\n\n   ⟨  press (most) any key to continue  ⟩'
+    + DEFAULT_TEXT_COLOUR,
+  hitOrStay: INPUT_TEXT_COLOUR + '    (h)it or (s)tay?' + DEFAULT_TEXT_COLOUR,
   win: ' wins!',
-  nextRound: '[press (most) any key for next round]',
+  nextRound: INPUT_TEXT_COLOUR
+    + '\n⟨  press (most) any key for next round  ⟩'
+    + DEFAULT_TEXT_COLOUR,
 };
+
+const FANCY_WELCOME_MESSAGE = `╦ ╦┌─┐┬  ┌─┐┌─┐┌┬┐┌─┐  ╔╦╗┌─┐
+║║║├┤ │  │  │ ││││├┤    ║ │ │
+╚╩╝└─┘┴─┘└─┘└─┘┴ ┴└─┘   ╩ └─┘` + '\n' +
+    `  ██████  ██       █████   ██████ ██   ██      ██  █████   ██████ ██   ██ 
+  ██   ██ ██      ██   ██ ██      ██  ██       ██ ██   ██ ██      ██  ██  
+  ██████  ██      ███████ ██      █████        ██ ███████ ██      █████   
+  ██   ██ ██      ██   ██ ██      ██  ██  ██   ██ ██   ██ ██      ██  ██  
+  ██████  ███████ ██   ██  ██████ ██   ██  █████  ██   ██  ██████ ██   ██ `;
 
 const SCOREBOARD_TEMPLATE =
   makeScoreboardTemplate(NUMBER_OF_CPUS, NUMBER_OF_USERS);
@@ -200,6 +218,40 @@ console.clear();
 print(MESSAGES.goodbye);
 //! END
 
+//******************\\
+//* GAME FUNCTIONS *\\
+//******************\\
+function drawCard(deck) {
+  if (deck.length <= 1) {
+    let newDeck = shuffled(MASTER_DECK.slice());
+    deck.push(...newDeck);
+  }
+
+  return deck.pop();
+}
+
+function shuffled(inputDeck, numOfShuffles = 5) {
+  let copiedDeck = inputDeck.slice();
+  let shuffles = 0;
+
+  while (shuffles < numOfShuffles) {
+    copiedDeck.sort(() => {
+      return randomNumBetween(-1, 1);
+    });
+    copiedDeck = cutTheDeck(copiedDeck);
+    shuffles++;
+  }
+
+  return copiedDeck;
+}
+
+function cutTheDeck(inputDeck) {
+  let copiedDeck = inputDeck.slice();
+  let middleIndex = Math.floor(copiedDeck.length / 2);
+  let halfTheDeck = copiedDeck.splice(0, middleIndex);
+
+  return copiedDeck.concat(halfTheDeck);
+}
 
 function someoneWonTournament(scoreBoard) {
   return Object.values(scoreBoard).some(score => score >= WINS_NEEDED);
@@ -216,15 +268,10 @@ function getTournamentWinner(scoreBoard) {
   return null;
 }
 
-function drawCard(deck) {
-  if (deck.length === 1) {
-    let newDeck = shuffled(MASTER_DECK.slice());
-    deck.push(...newDeck);
-  }
 
-  return deck.pop();
-}
-
+//****************\\
+//* QUERY PLAYER *\\
+//****************\\
 function wantToPlayAgain() {
   print(MESSAGES.playAgain);
 
@@ -239,21 +286,101 @@ function getYesOrNo() {
   return yesOrNo === 'y';
 }
 
-// PRINT TABLETOP
-// PRINT TABLETOP
-// PRINT TABLETOP
+function userWantsToHit() {
+  print(MESSAGES.hitOrStay);
+
+  let userWantsToHit = readline.keyIn('', {limit: 'hs'}).toLowerCase() === 'h';
+
+  return userWantsToHit;
+}
+
+function anyKeyForNextRound() {
+  print(MESSAGES.nextRound);
+
+  if (USER_IS_PRESENT) {
+    readline.keyIn();
+  }
+  return true;
+}
+
+
+//************************\\
+//* CALCULATE HAND VALUE *\\
+//************************\\
+function getHandValue(playerHand) {
+  let handValue = 0;
+  let aceCount = 0;
+
+  playerHand.forEach(card => {
+    if (isAce(card)) {
+      aceCount++;
+      return;
+    }
+
+    handValue += getNonAceCardValue(card);
+  });
+
+  handValue += getAcesValues(aceCount, handValue);
+  handValue = isBusted(handValue) ? 'BUST' : handValue;
+
+  return handValue;
+}
+
+function isBusted(playerHandScore) {
+  return playerHandScore > HAND_VALUE_TARGET;
+}
+
+function getNonAceCardValue(card) {
+  let cardValue = card.replace(/[\W]/g, '');
+
+  switch (cardValue) {
+    case 'J':
+    case 'Q':
+    case 'K':
+      return 10;
+    case 'A':
+      break;
+    default:
+      return Number(cardValue);
+  }
+
+  return NaN;
+}
+
+function getAcesValues(numberOfAces, handValue) {
+  let acesOne = 0;
+  let acesEleven = numberOfAces;
+
+  while (acesEleven > 0) {
+    let acesValue = (acesOne * 1) + (acesEleven * 11);
+    let totalValue = acesValue + handValue;
+    if (totalValue <= HAND_VALUE_TARGET) break;
+    acesOne++;
+    acesEleven--;
+  }
+
+  return (acesOne * 1) + (acesEleven * 11);
+}
+
+function isAce(card) {
+  let cardValue = card.replace(/[\W]/gi, '');
+
+  return cardValue === 'A';
+}
+
+
 //******************\\
 //* PRINT TABLETOP *\\
 //******************\\
 function printTableTop(hands, handIsVisible, handValues, scoreBoard, winner) {
   console.clear();
-  printScore(scoreBoard, winner);
+  printScoreBoard(scoreBoard, winner);
 
   for (let CPUPlayerNum = 1; CPUPlayerNum <= NUMBER_OF_CPUS; CPUPlayerNum++) {
     let cpuName = CPUS_NAME + CPUPlayerNum;
     let playerName = (CPUS_NAME + CPUPlayerNum);
 
-    if (handIsVisible[cpuName]) {
+    if (handIsVisible[cpuName] || NUMBER_OF_USERS === 0) {
       printCardsFaceUp(playerName, hands[cpuName], handValues);
     } else {
       printCardsFaceDown(playerName, hands[cpuName]);
@@ -322,7 +449,7 @@ function addNameToSection(inputHand, section, playerName,
   let nameLength = playerName.length;
   let printableName = playerName.padEnd(nameLength + SPACES_AFTER_NAME, ' ');
   let namePadding = makeSpaces(printableName.length);
-  let valuesAreVisible = (numCardsVisible === Infinity);
+  let valuesAreVisible = numCardsVisible === Infinity;
   let handValue = valuesAreVisible ? handValues[playerName] : null;
 
   if (section === 'middle') {
@@ -338,18 +465,21 @@ function addNameToSection(inputHand, section, playerName,
   return outputPrintableHand;
 }
 
-function printScore(scoreBoard, winnerName) {
+function printScoreBoard(scoreBoard, winnerName) {
   let printableScore = '';
   let leadingSpaces = '     ';
+
   for (let player in scoreBoard) {
     if (player === 'tie' || player === 'all bust') continue;
-    printableScore += leadingSpaces + player + ': ' + scoreBoard[player];
+
+    printableScore += leadingSpaces + player +
+      ': ' + scoreBoard[player];
   }
   let dashes = makeDashes(printableScore.length - leadingSpaces.length);
 
   print(leadingSpaces + MESSAGES.numberOfGames + '      ' + MESSAGES.numberOfWins);
   print('\n' + leadingSpaces + dashes + '\n' + printableScore + '\n' + leadingSpaces + dashes);
-  print(getDeclareRoundWinMessage(printableScore, winnerName));
+  print(getRoundWinMessage(printableScore, winnerName));
 }
 
 function getRoundWinner(handValues) {
@@ -370,106 +500,43 @@ function getRoundWinner(handValues) {
   return roundWinner;
 }
 
-
-function getDeclareRoundWinMessage(scoreLine, winnerName = null) {
+function getRoundWinMessage(scoreLine, winnerName = null) {
   if (winnerName === null) {
     return '\n\n';
   } else if (winnerName === 'tie') {
-    return '          TIE (NO SCORE CHANGE)' + '\n' + '\n';
+    return TIE_BUST_TEXT_COLOUR + '          TIE (NO SCORE CHANGE)' + DEFAULT_TEXT_COLOUR + '\n\n';
   } else if (winnerName === 'all bust') {
-    return '          ALL BUST' + '\n' + '\n';
+    return TIE_BUST_TEXT_COLOUR + '          ALL BUST' + DEFAULT_TEXT_COLOUR + '\n\n';
   }
-  let nameRegex = RegExp(winnerName);
-  let nameLength = winnerName.length;
-  let nameReplacement = 'Ó'.repeat(nameLength);
-  let scoreLineWithNameReplaced = scoreLine.replace(nameRegex, nameReplacement);
+
+  let arrowsLine = replaceNameWithArrowsAndRestWithSpaces(
+    scoreLine,
+    winnerName
+  );
+  let WINNERline = replaceArrowsWithWINNER(arrowsLine);
+  return WINNER_TEXT_COLOUR + arrowsLine + '\n' + WINNERline + '\n' + DEFAULT_TEXT_COLOUR;
+}
+
+function replaceNameWithArrowsAndRestWithSpaces(inputString, playerName) {
+  let nameRegex = RegExp(playerName);
+  let scoreLineWithNameReplaced = inputString.replace(nameRegex, 'Ó');
   let scoreLineAllSpaces = scoreLineWithNameReplaced.replace(/[^Ó]/gi, ' ');
 
   let pointToWinnerArray = [];
-  pointToWinnerArray.push(scoreLineAllSpaces.replace(/Ó/gi, '↑'));
-  pointToWinnerArray.push('\n');
-  pointToWinnerArray.push(scoreLineAllSpaces.replace(/[Ó]{1,}/, 'WINNER'));
-  return pointToWinnerArray.join('') + '\n';
+  pointToWinnerArray.push(scoreLineAllSpaces.replace(/Ó/, '↑↑↑↑↑↑'));
+  return pointToWinnerArray.join();
+}
+
+function replaceArrowsWithWINNER(inputString) {
+  let WINNERline = inputString.replace(/[↑]{1,}/, 'WINNER');
+  return WINNERline;
 }
 
 
-function userWantsToHit() {
-  print(MESSAGES.hitOrStay);
-
-  let userWantsToHit = readline.keyIn('', {limit: 'hs'}).toLowerCase() === 'h';
-
-  return userWantsToHit;
-}
-
-//************************\\
-//* CALCULATE HAND VALUE *\\
-//************************\\
-function getHandValue(playerHand) {
-  let handValue = 0;
-  let aceCount = 0;
-
-  playerHand.forEach(card => {
-    if (isAce(card)) {
-      aceCount++;
-      return;
-    }
-
-    handValue += getNonAceCardValue(card);
-  });
-
-  handValue += getAcesValues(aceCount, handValue);
-  handValue = isBusted(handValue) ? 'BUST' : handValue;
-
-  return handValue;
-}
-
-function isBusted(playerHandScore) {
-  return playerHandScore > HAND_VALUE_TARGET;
-}
-
-function getNonAceCardValue(card) {
-  let cardValue = card.replace(/[\W]/g, '');
-
-  switch (cardValue) {
-    case 'J':
-    case 'Q':
-    case 'K':
-      return 10;
-    case 'A':
-      break;
-    default:
-      return Number(cardValue);
-  }
-
-  return NaN;
-}
-
-function getAcesValues(numberOfAces, handValue) {
-  let acesOne = 0;
-  let acesEleven = numberOfAces;
-
-  while (acesEleven > 0) {
-    let acesValue = (acesOne * 1) + (acesEleven * 11);
-    let totalValue = acesValue + handValue;
-    if (totalValue < HAND_VALUE_TARGET) break;
-    acesOne++;
-    acesEleven--;
-  }
-
-  return (acesOne * 1) + (acesEleven * 11);
-}
-
-function isAce(card) {
-  let cardValue = card.replace(/[\W]/gi, '');
-
-  return cardValue === 'A';
-}
-
-
-//************************\\
-//* BUILD / SHUFFLE DECK *\\
-//************************\\
-function buildDeck(suits, values) {
+//******************\\
+//* MAKE TEMPLATES *\\
+//******************\\
+function makeMasterDeck(suits, values) {
   let deck = [];
 
   suits.forEach(suit => {
@@ -482,34 +549,6 @@ function buildDeck(suits, values) {
   return deck;
 }
 
-
-function shuffled(inputDeck, numOfShuffles = 5) {
-  let copiedDeck = inputDeck.slice();
-  let shuffles = 0;
-
-  while (shuffles < numOfShuffles) {
-    copiedDeck.sort(() => {
-      return randomNumBetween(-1, 1);
-    });
-    copiedDeck = cutTheDeck(copiedDeck);
-    shuffles++;
-  }
-
-  return copiedDeck;
-}
-
-function cutTheDeck(inputDeck) {
-  let copiedDeck = inputDeck.slice();
-  let middleIndex = Math.floor(copiedDeck.length / 2);
-  let halfTheDeck = copiedDeck.splice(0, middleIndex);
-
-  return copiedDeck.concat(halfTheDeck);
-}
-
-
-//******************\\
-//* MAKE TEMPLATES *\\
-//******************\\
 function makeScoreboardTemplate(numberOfCpus, numberOfUsers) {
   let scoreBoard = {};
 
@@ -569,18 +608,6 @@ function makePlayerHandsAreVisibleTemplate(numberOfCpus, numberOfUsers) {
   return playersHandsVisibleOrNot;
 }
 
-//*************\\
-//* GET INPUT *\\
-//*************\\
-
-function anyKeyForNextRound() {
-  print(MESSAGES.nextRound);
-
-  if (USER_IS_PRESENT) {
-    readline.keyIn();
-  }
-  return true;
-}
 
 //********\\
 //* MISC *\\
@@ -614,35 +641,8 @@ function print(input) {
   console.log(input);
 }
 
-function printOpeningScreen() {
-  console.clear();
-
-  print(`╦ ╦┌─┐┬  ┌─┐┌─┐┌┬┐┌─┐  ╔╦╗┌─┐
-║║║├┤ │  │  │ ││││├┤    ║ │ │
-╚╩╝└─┘┴─┘└─┘└─┘┴ ┴└─┘   ╩ └─┘` + '\n' +
-    `  ██████  ██       █████   ██████ ██   ██      ██  █████   ██████ ██   ██ 
-  ██   ██ ██      ██   ██ ██      ██  ██       ██ ██   ██ ██      ██  ██  
-  ██████  ██      ███████ ██      █████        ██ ███████ ██      █████   
-  ██   ██ ██      ██   ██ ██      ██  ██  ██   ██ ██   ██ ██      ██  ██  
-  ██████  ███████ ██   ██  ██████ ██   ██  █████  ██   ██  ██████ ██   ██ `);
-
-  print('\n' + '       ' + MESSAGES.numberOfGames + '            ' + MESSAGES.numberOfWins);
-  print(MESSAGES.pressAnyKey);
-
-  readline.keyIn();
-}
-
 function makeDashes(numOfDashes) {
   return '-'.repeat(numOfDashes);
-}
-
-function printShufflingMessage(scoreBoard, lengthOfMessage = 0.6) {
-  console.clear();
-
-  printScore(scoreBoard);
-  print(MESSAGES.shuffling);
-
-  pause(lengthOfMessage);
 }
 
 function throwErrorsIfGameParametersAreWrong() {
@@ -661,3 +661,33 @@ function throwErrorsIfGameParametersAreWrong() {
     throw new Error('Outside player limits');
   }
 }
+
+
+//************************\\
+//* PRINT FANCY MESSAGES *\\
+//************************\\
+function printShufflingMessage(scoreBoard, lengthOfMessage = 0.6) {
+  console.clear();
+
+  printScoreBoard(scoreBoard);
+  print(MESSAGES.shuffling);
+  pause(lengthOfMessage);
+}
+
+function printOpeningScreen() {
+  console.clear();
+
+  print(FANCY_WELCOME_MESSAGE);
+  print('\n' + '       ' + MESSAGES.numberOfGames + '            ' + MESSAGES.numberOfWins);
+  print(MESSAGES.pressAnyKey);
+
+  readline.keyIn();
+}
+
+// const FANCY_SHUFFLING_MESSAGE =
+// "  _____ _    _ _    _ ______ ______ _      _____ _   _  _____ " + '\n' +
+// " / ____| |  | | |  | |  ____|  ____| |    |_   _| \\ | |/ ____|" + '\n' +
+// "| (___ | |__| | |  | | |__  | |__  | |      | | |  \\| | |  __ " + '\n' +
+// " \\___ \\|  __  | |  | |  __| |  __| | |      | | | . ` | | |_ |" + '\n' +
+// " ____) | |  | | |__| | |    | |    | |____ _| |_| |\\  | |__| |" + '\n' +
+// "|_____/|_|  |_|\\____/|_|    |_|    |______|_____|_| \\_|\\_____|";
