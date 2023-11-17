@@ -126,7 +126,6 @@ while (true) {
         handValues[player] = getHandValue(hands[player]);
 
         pause(PAUSE_BETWEEN_DEALT_CARDS);
-        console.clear();
 
         printTableTop(hands, playerHandsAreVisible, handValues, scoreBoard);
       }
@@ -207,11 +206,7 @@ while (true) {
   //! TOURNAMENT END
   print(getTournamentWinner(scoreBoard) + MESSAGES.win);
 
-  if (wantToPlayAgain()) {
-    continue;
-  } else {
-    break;
-  }
+  if (wantToPlayAgain()) break;
 }
 
 console.clear();
@@ -495,7 +490,7 @@ function getRoundWinner(handValues) {
     }
   }
   if (roundWinner === null) {
-    return 'all bust';
+    roundWinner = 'all bust';
   }
   return roundWinner;
 }

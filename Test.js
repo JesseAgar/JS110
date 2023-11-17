@@ -1,19 +1,51 @@
-var readlineSync = require('readline-sync'),
+const WHITE = '\x1b[0m';
+const GREEN = '\x1b[32m';
 
-MAX = 60, MIN = 0, value = 30, key;
+let apple = GREEN + 'rock' + WHITE;
+let rules = {
+  rock: {
+    winsAgainst: ['scissors'],
+  },
+  paper: {
+    winsAgainst: ['rock'],
+  },
+  scissors: {
+    winsAgainst: ['paper'],
+  },
+};
 
-console.log('\n\n' + (new Array(20)).join(' ') +
-  '[Z] <- -> [X]  FIX: [SPACE]\n');
+console.log(getRandomMoveThatBeats(apple, rules));
 
-while (true) {
-  console.log('\x1B[1A\x1B[K|' +
-    (new Array(value + 1)).join('-') + 'O' +
-    (new Array(MAX - value + 1)).join('-') + '| ' + value);
-  key = readlineSync.keyIn('',
-    {hideEchoBack: true, mask: '', limit: 'zx '});
-  if (key === 'z') { if (value > MIN) { value--; } }
-  else if (key === 'x') { if (value < MAX) { value++; } }
-  else { break; }
+function getRandomMoveThatBeats(move, rules) {
+  let movesThatWouldWin = [];
+
+  let possibleMoves = Object.keys(rules);
+  console.log(possibleMoves);
+
+  possibleMoves.forEach(possibleMove => {
+    if (rules[possibleMove].winsAgainst.includes(removeColourTags(move, possibleMoves))) {
+      console.log(move);
+      movesThatWouldWin.push(removeColourTags(move, possibleMoves));
+    }
+  });
+
+  return movesThatWouldWin[randomNumBetween(0, movesThatWouldWin.length - 1)];
 }
 
-console.log("\u001b[44mHello, world!\u001b[0m");
+
+function removeColourTags(string, possibleMoves) {
+  for (let index = 0; index < possibleMoves.length; index++) {
+    let move = possibleMoves[index];
+    if (string.includes(move)) {
+      return move;
+    }
+  }
+  return string;
+}
+
+function randomNumBetween(min, max) {
+  if (min > max) {
+    [min, max] = [max, min];
+  }
+  return Math.floor((Math.random() * (max - min + 1)) + min);
+}
